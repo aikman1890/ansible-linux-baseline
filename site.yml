@@ -1,0 +1,14 @@
+# Baseline playbook: common config first, then hardening.
+# Run: ansible-playbook -i inventory/hosts.yml site.yml
+---
+- name: Apply Linux baseline (common config)
+  hosts: all
+  roles:
+    - role: common
+      tags: [common]
+
+- name: Apply Linux hardening (CIS-style)
+  hosts: all
+  roles:
+    - role: hardening
+      tags: [hardening]

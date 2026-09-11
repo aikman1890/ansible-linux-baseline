@@ -1,0 +1,45 @@
+# Managed by Ansible (hardening role) — do not edit by hand.
+# CIS-style hardened sshd configuration.
+
+Port 22
+Protocol 2
+ListenAddress 0.0.0.0
+
+# --- Authentication ---
+PermitRootLogin {{ hardening_sshd_permit_root_login }}
+PasswordAuthentication {{ hardening_sshd_password_authentication }}
+ChallengeResponseAuthentication {{ hardening_sshd_challenge_response }}
+UsePAM {{ hardening_sshd_use_pam }}
+PubkeyAuthentication yes
+PermitEmptyPasswords no
+MaxAuthTries {{ hardening_sshd_max_auth_tries }}
+LoginGraceTime {{ hardening_sshd_login_grace_time }}
+MaxSessions {{ hardening_sshd_max_sessions }}
+{% if hardening_sshd_allow_users | length > 0 %}
+AllowUsers {{ hardening_sshd_allow_users | join(' ') }}
+{% endif %}
+
+# --- Session / idle timeout ---
+ClientAliveInterval {{ hardening_sshd_client_alive_interval }}
+ClientAliveCountMax {{ hardening_sshd_client_alive_count_max }}
+
+# --- Forwarding / tunneling (disabled unless you need it) ---
+X11Forwarding {{ hardening_sshd_x11_forwarding }}
+AllowTcpForwarding no
+PermitTunnel no
+
+# --- Banner ---
+Banner {{ hardening_sshd_banner_path }}
+
+# --- Misc hardening ---
+StrictModes yes
+IgnoreRhosts yes
+HostbasedAuthentication no
+PermitUserEnvironment no
+
+# --- SFTP locked down (no shell) ---
+Subsystem sftp internal-sftp
+
+# --- Logging ---
+SyslogFacility AUTH
+LogLevel VERBOSE

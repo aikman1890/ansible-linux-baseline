@@ -1,0 +1,50 @@
+# common role defaults — override in group_vars/host_vars or -e
+---
+# Base packages installed on every host
+common_base_packages:
+  - vim
+  - htop
+  - chrony
+  - rsyslog
+  - curl
+  - tar
+  - unzip
+  - policycoreutils-python-utils  # RHEL only; filtered by the task
+
+# Services that should be disabled if present (attack surface reduction)
+common_disabled_services:
+  - avahi-daemon
+  - cups
+  - rpcbind
+  - nfs-server
+  - telnet.socket
+
+# Admin users to create. Supply ssh_keys per user via vault or group_vars.
+# Example:
+#   common_admin_users:
+#     - name: sstjohn
+#       comment: "Shaun St. John"
+#       groups: ["wheel"]        # "sudo" on Ubuntu
+#       shell: /bin/bash
+#       ssh_keys:
+#         - "ssh-ed25519 AAAA... sstjohn@laptop"
+common_admin_users: []
+
+# Fallback sudo group when a user lists neither wheel nor sudo
+common_sudo_group: "{{ 'wheel' if ansible_os_family == 'RedHat' else 'sudo' }}"
+
+# MOTD banner text
+common_motd_banner: |
+  ***************************************************************************
+  *                         AUTHORIZED USE ONLY                             *
+  *  This system is the property of the organization. All activity may be   *
+  *  monitored and recorded. Disconnect immediately if you are not an       *
+  *  authorized user.                                                       *
+  ***************************************************************************
+
+# NTP servers for chrony
+common_ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+  - 2.pool.ntp.org
+  - 3.pool.ntp.org

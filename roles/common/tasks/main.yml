@@ -1,0 +1,91 @@
+# common role — base packages, admin users, MOTD, NTP, service pruning
+---
+- name: Install base packages (RHEL family)
+  ansible.builtin.dnf:
+    name: "{{ common_base_packages | reject('equalto', 'policycoreutils-python-utils') | list + ['policycoreutils-python-utils'] }}"
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Install base packages (Debian family)
+  ansible.builtin.apt:
+    name: "{{ common_base_packages | reject('equalto', 'policycoreutils-python-utils') | list }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Ensure sudo group exists
+  ansible.builtin.group:
+    name: "{{ common_sudo_group }}"
+    state: present
+
+- name: Create admin users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    comment: "{{ item.comment | default(item.name) }}"
+    groups: "{{ item.groups | default([common_sudo_group]) }}"
+    append: true
+    shell: "{{ item.shell | default('/bin/bash') }}"
+    create_home: true
+    state: present
+  loop: "{{ common_admin_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Deploy SSH authorized keys for admin users
+  ansible.builtin.authorized_key:
+    user: "{{ item.0.name }}"
+    key: "{{ item.1 }}"
+    state: present
+    exclusive: true # remove keys not managed here — no orphaned access
+  loop: "{{ common_admin_users | subelements('ssh_keys', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  when: common_admin_users | length > 0
+
+- name: Allow sudo group passwordless sudo for admin convenience
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/90-admin-group
+    content: "%{{ common_sudo_group }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+
+- name: Deploy MOTD banner
+  ansible.builtin.template:
+    src: motd.j2
+    dest: /etc/motd
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure chrony NTP servers
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: "{{ '/etc/chrony.conf' if ansible_os_family == 'RedHat' else '/etc/chrony/chrony.conf' }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart chrony
+
+- name: Ensure chrony is enabled and running
+  ansible.builtin.service:
+    name: "{{ 'chronyd' if ansible_os_family == 'RedHat' else 'chrony' }}"
+    state: started
+    enabled: true
+
+- name: Ensure rsyslog is enabled and running
+  ansible.builtin.service:
+    name: rsyslog
+    state: started
+    enabled: true
+
+- name: Disable unneeded services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop: "{{ common_disabled_services }}"
+  failed_when: false # service may not exist on this distro — that's fine
+  changed_when: false

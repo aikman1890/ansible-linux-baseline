@@ -1,0 +1,13 @@
+galaxy_info:
+  role_name: hardening
+  author: Shaun Nicholas St. John
+  description: CIS-style Linux hardening — sshd, pwquality, auditd, firewall, sysctl, login.defs, AIDE.
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions: ["8", "9"]
+    - name: Ubuntu
+      versions: ["22.04"]
+  galaxy_tags: [security, hardening, cis, sshd, auditd]
+dependencies: []

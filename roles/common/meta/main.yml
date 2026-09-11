@@ -1,0 +1,13 @@
+galaxy_info:
+  role_name: common
+  author: Shaun Nicholas St. John
+  description: Base Linux configuration — packages, admin users, MOTD, NTP, service pruning.
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions: ["8", "9"]
+    - name: Ubuntu
+      versions: ["22.04"]
+  galaxy_tags: [system, baseline, ntp, users]
+dependencies: []

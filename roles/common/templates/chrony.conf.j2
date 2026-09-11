@@ -1,0 +1,17 @@
+# Managed by Ansible — do not edit by hand.
+# chrony NTP configuration
+{% for server in common_ntp_servers %}
+server {{ server }} iburst
+{% endfor %}
+
+# Record the rate at which the system clock gains/losses time
+driftfile /var/lib/chrony/drift
+
+# Allow the system clock to step in the first three updates if off by a lot
+makestep 1.0 3
+
+# Enable kernel RTC synchronization
+rtcsync
+
+# Log directory
+logdir /var/log/chrony

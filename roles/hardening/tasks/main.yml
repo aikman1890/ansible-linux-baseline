@@ -1,0 +1,193 @@
+# hardening role — CIS-style: sshd, pwquality, auditd, firewall, sysctl,
+# login.defs, AIDE
+---
+# --- SSH daemon -------------------------------------------------------------
+- name: Deploy hardened sshd_config
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: "0600"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Restart sshd
+
+- name: Deploy SSH login banner
+  ansible.builtin.copy:
+    dest: "{{ hardening_sshd_banner_path }}"
+    content: |
+      ***************************************************************************
+      *                         AUTHORIZED USE ONLY                             *
+      *  Unauthorized access is prohibited. All activity is monitored.          *
+      ***************************************************************************
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart sshd
+
+# --- Password quality -------------------------------------------------------
+- name: Install libpam-pwquality (RHEL)
+  ansible.builtin.dnf:
+    name: libpam-pwquality
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Install libpam-pwquality (Debian)
+  ansible.builtin.apt:
+    name: libpam-pwquality
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Enforce password quality policy
+  ansible.builtin.copy:
+    dest: /etc/security/pwquality.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible — hardening role
+      minlen = {{ hardening_pw_minlen }}
+      minclass = {{ hardening_pw_minclass }}
+      maxrepeat = {{ hardening_pw_maxrepeat }}
+      maxsequence = {{ hardening_pw_maxsequence }}
+      dcredit = {{ hardening_pw_dcredit }}
+      ucredit = {{ hardening_pw_ucredit }}
+      lcredit = {{ hardening_pw_lcredit }}
+      ocredit = {{ hardening_pw_ocredit }}
+
+# --- Password aging (login.defs) --------------------------------------------
+- name: Set password aging policy in login.defs
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: "^#?{{ item.key }}\\s"
+    line: "{{ item.key }}   {{ item.value }}"
+    state: present
+  loop:
+    - { key: "PASS_MAX_DAYS", value: "{{ hardening_pass_max_days }}" }
+    - { key: "PASS_MIN_DAYS", value: "{{ hardening_pass_min_days }}" }
+    - { key: "PASS_WARN_AGE", value: "{{ hardening_pass_warn_age }}" }
+
+# --- auditd ------------------------------------------------------------------
+- name: Install auditd (RHEL)
+  ansible.builtin.dnf:
+    name: audit
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Install auditd (Debian)
+  ansible.builtin.apt:
+    name: auditd
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Deploy auditd rules for privileged commands and identity files
+  ansible.builtin.copy:
+    dest: /etc/audit/rules.d/hardening.rules
+    owner: root
+    group: root
+    mode: "0640"
+    content: |
+      # Managed by Ansible — hardening role
+      {% for rule in hardening_auditd_rules %}
+      {{ rule }}
+      {% endfor %}
+      -e 2
+  notify: Restart auditd
+
+- name: Ensure auditd is enabled and running
+  ansible.builtin.service:
+    name: auditd
+    state: started
+    enabled: true
+
+# --- Firewall ----------------------------------------------------------------
+- name: Install and configure firewalld (RHEL)
+  ansible.builtin.dnf:
+    name: firewalld
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Ensure firewalld is enabled and running (RHEL)
+  ansible.builtin.service:
+    name: firewalld
+    state: started
+    enabled: true
+  when: ansible_os_family == "RedHat"
+
+- name: Allow only baseline TCP ports in firewalld (RHEL)
+  ansible.posix.firewalld:
+    port: "{{ item }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop: "{{ hardening_firewall_allowed_tcp_ports }}"
+  when: ansible_os_family == "RedHat"
+
+- name: Set firewalld default zone to drop (RHEL)
+  ansible.posix.firewalld:
+    zone: drop
+    state: present
+    permanent: true
+    immediate: true
+  when: ansible_os_family == "RedHat"
+
+- name: Install ufw (Debian)
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Reset ufw to a known state (Debian)
+  ansible.builtin.command: ufw --force reset
+  when: ansible_os_family == "Debian"
+  changed_when: true
+
+- name: Set ufw default policies to deny (Debian)
+  ansible.builtin.command: "ufw default {{ item }}"
+  loop:
+    - deny incoming
+    - allow outgoing
+  when: ansible_os_family == "Debian"
+  changed_when: true
+
+- name: Allow only baseline TCP ports in ufw (Debian)
+  ansible.builtin.command: "ufw allow {{ item }}/tcp"
+  loop: "{{ hardening_firewall_allowed_tcp_ports }}"
+  when: ansible_os_family == "Debian"
+  changed_when: true
+
+- name: Enable ufw (Debian)
+  ansible.builtin.command: ufw --force enable
+  when: ansible_os_family == "Debian"
+  changed_when: false # already enabled on re-runs; reset above handles changes
+
+# --- sysctl ------------------------------------------------------------------
+- name: Apply kernel hardening sysctl settings
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-hardening.conf
+    reload: true
+    state: present
+  loop: "{{ hardening_sysctl | dict2items }}"
+
+# --- AIDE (file integrity) ---------------------------------------------------
+- name: Install AIDE
+  ansible.builtin.package:
+    name: aide
+    state: present
+
+- name: Initialize AIDE database (first run only)
+  ansible.builtin.command: "{{ 'aide --init' if ansible_os_family == 'RedHat' else 'aideinit' }}"
+  args:
+    creates: "{{ '/var/lib/aide/aide.db.gz' if ansible_os_family == 'RedHat' else '/var/lib/aide/aide.db' }}"
+  when: hardening_aide_init | bool
+  changed_when: true
+  # NOTE: aide --init can take 10+ minutes on large filesystems; run it in a
+  # maintenance window. The `creates` guard keeps this idempotent.

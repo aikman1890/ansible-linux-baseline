@@ -1,0 +1,71 @@
+# hardening role defaults — override in group_vars/host_vars or -e
+---
+# --- sshd ---
+hardening_sshd_permit_root_login: "no"
+hardening_sshd_password_authentication: "no"
+hardening_sshd_challenge_response: "no"
+hardening_sshd_use_pam: "yes"
+hardening_sshd_x11_forwarding: "no"
+hardening_sshd_max_auth_tries: 3
+hardening_sshd_client_alive_interval: 300   # 5 min idle timeout
+hardening_sshd_client_alive_count_max: 2
+hardening_sshd_login_grace_time: 60
+hardening_sshd_max_sessions: 4
+hardening_sshd_allow_users: []              # e.g. ["sstjohn", "deploy"]; empty = no restriction
+hardening_sshd_banner_path: /etc/issue.net
+
+# --- password policy (pwquality) ---
+hardening_pw_minlen: 14
+hardening_pw_minclass: 3                    # require 3 of: upper, lower, digit, other
+hardening_pw_maxrepeat: 3
+hardening_pw_maxsequence: 3
+hardening_pw_dcredit: -1                    # at least 1 digit
+hardening_pw_ucredit: -1                    # at least 1 uppercase
+hardening_pw_lcredit: -1                    # at least 1 lowercase
+hardening_pw_ocredit: -1                    # at least 1 symbol
+
+# --- login.defs aging ---
+hardening_pass_max_days: 90
+hardening_pass_min_days: 7
+hardening_pass_warn_age: 14
+
+# --- firewall: only these TCP ports stay open ---
+hardening_firewall_allowed_tcp_ports:
+  - 22    # ssh
+  - 80    # http
+  - 443   # https
+
+# --- auditd ---
+hardening_auditd_rules:
+  # Track privileged command usage (setuid/setgid binaries)
+  - "-a always,exit -F arch=b64 -S execve -C uid!=euid -F euid=0 -k privileged"
+  - "-a always,exit -F arch=b32 -S execve -C uid!=euid -F euid=0 -k privileged"
+  # Track identity changes
+  - "-w /etc/passwd -p wa -k identity"
+  - "-w /etc/group -p wa -k identity"
+  - "-w /etc/shadow -p wa -k identity"
+  - "-w /etc/sudoers -p wa -k identity"
+  - "-w /etc/sudoers.d/ -p wa -k identity"
+  # Track SSH config changes
+  - "-w /etc/ssh/sshd_config -p wa -k sshd"
+
+# --- sysctl hardening ---
+hardening_sysctl:
+  net.ipv4.ip_forward: 0
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.conf.all.accept_source_route: 0
+  net.ipv4.conf.default.accept_source_route: 0
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.secure_redirects: 0
+  net.ipv4.conf.default.secure_redirects: 0
+  net.ipv4.conf.all.log_martians: 1
+  net.ipv4.conf.default.log_martians: 1
+  net.ipv4.icmp_echo_ignore_broadcasts: 1
+  net.ipv4.tcp_syncookies: 1
+  net.ipv4.tcp_max_syn_backlog: 2048
+  net.ipv6.conf.all.disable_ipv6: 0   # set to 1 if you don't use IPv6
+
+# --- AIDE ---
+hardening_aide_init: false  # set true on first run to build the baseline DB (slow)

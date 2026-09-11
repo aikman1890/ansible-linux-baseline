@@ -1,0 +1,22 @@
+# Ansible artifacts
+*.retry
+*.vault_password
+.vault_pass
+
+# Vault-encrypted variable files sometimes carry secrets alongside —
+# never commit unencrypted secrets
+group_vars/**/vault.yml
+host_vars/**/vault.yml
+!group_vars/**/vault.yml.example
+
+# Python / editor noise
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Molecule / test artifacts
+.molecule/
